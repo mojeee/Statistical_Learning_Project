@@ -1,0 +1,405 @@
+---
+title: "statProject"
+## markdown file
+Autors: Mojtaba Amini, Javier Alberto Bernal Sigala, Carmen Rocio Ortiz Benitez, Saeed Soufeh
+output: pdf_document
+date: '2022-05-20'
+---
+\newpage
+\tableofcontents
+\listoffigures
+\listoftables
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages('rmarkdown')
+install.packages('pillar')
+library(rmarkdown)
+library(pillar)
+library(ggplot2)
+
+install.packages("dplyr")
+library(dplyr)
+install.packages("corrplot")
+library(corrplot)
+install.packages("tidyverse")
+library(tidyverse)
+install.packages("Amelia")
+library(Amelia)
+install.packages("naniar")
+library(naniar)
+install.packages("Hmisc")
+library(Hmisc)
+install.packages("data.table")
+library(data.table)
+install.packages("fastDummies")
+library(fastDummies)
+install.packages("hrbrthemes")
+library(hrbrthemes)
+install.packages("viridis")
+library(viridis)
+install.packages("forcats")
+library(forcats)
+
+#library(PerformanceAnalytics)
+```
+# 1 Introduction
+
+Around the time of graduation from a post graduate degree, students' have chances of being recruited by corporate companies on campus based on various variables. Due to the presence of so many variables, it is not straightforward to predict these chances. Thus, the aim of this project is to achieve this by first analyzing the factors that influence students' chances of being hired before graduation by exploring the data set in depth in order to find correlations between the variables, and secondly building a model to predict the outcome based on the given variables with enough accuracy and efficiency.
+
+# 2 Objectives
+
+The main objective of this project is to build a model to predict if a student will be placed or not before graduation and to determine which variables are the most relevant. Then, to perform a deep analysis of these variables. Furthermore, we would like to determine if among the placed students the variables for getting a high salary are the same as those for getting placed. If not, which variables differ and why.
+
+# 3 Data Collection 
+
+This data set has 215 observations and 15 variables, and it is a record from an Indian Business School's Masters in Business Administration (MBA) placement history. It only has blank values in the salary column, for students with status "Not placed". It is available publicly (in https://www.kaggle.com/datasets/benroshan/factors-affecting-campus-placement).
+Chances of campus recruitment may depend on different factors such as student's grades, employability score, specialization, previous work experience, etc; and also the correlations between them. It is easy to see how any of these variables could be meaningful in our analysis.
+
+## 3.1  Variables description
+
+* sl_no: serial number to identify each student;
+* gender: whether the student is male or female (M/F);
+* ssc_p: lower secondary education average percentage score from 1st grade until the end of 10th grade;
+* ssc_b: whether the lower secondary educational institution was controlled by the central board, which is the most popular in India, or other (Central/Others);
+* hsc_p: higher secondary education average percentage score from 11th grade until the end of 12th grade;
+* hsc_b: whether the higher secondary educational institution was controlled by the central board, which is the most popular in India, or other (Central/Others);
+* hsc_s: specialization in higher secondary education (Commerce, Science, Arts);
+* degree_p: final average percentage score of the undergraduate degree;
+* degree_t: undergraduate degree field (Sci&Tech/Comm&Mgmt/Other);
+* workex: whether the student has previous work experience;
+* etest_p: employability test percentage, it defines the student's job readiness;
+* specialisation: dual specialisation of the MBA program, either Marketing & Finance or Marketing & Human Resources (Mkt&Fin/Mkt&HR);
+* mba_p: final average percentage score of the MBA course;
+* status: status of job placement before graduation (Placed/Not placed);
+* salary: yearly salary offered by corporate to candidates in rupees.
+
+```{r cc}
+data <- read.csv(file = "complete_dataset.csv")
+glimpse(data)
+```
+
+## 3.2 Data preparation
+
+We check for "duplicate" rows and NA values on the data set.
+
+```{r cc}
+cat("Cheking for duplicated rows...", "The dataset has", sum(duplicated(data)), "duplicated rows.\n")
+
+cat("We check to find NA values.", "The dataset has", sum(is.na(data)), "null values\n")
+
+```
+The data set has 67 null values on the salary column, which correspond to the students that have status "Not placed".
+
+We proceed to eliminate the "Serial" column, as it does not provide any valuable information for our analysis.
+
+```{r cc}
+
+data$sl_no <- NULL 
+
+```
+
+
+# 4 Exploratory Data Analysis (EDA)
+
+In this section we will use some visual tools to discover hidden trends and patterns in the data set that can help us build a an accurate and efficient model to make predictions on students' campus recruitment.
+
+
+```{r ca}
+#str(data)
+data_copy <- as.data.frame(unclass(data), stringsAsFactors = TRUE)
+summary(data_copy)
+
+```
+DROP THE MISSING DATA
+```{r}
+#see the missing values
+vis_miss(data)
+
+#drop missing solar_exposure
+data <- data[!is.na(data$solar_exposure),]
+
+#drop missing rainfall
+data <- data[!is.na(data$rainfall),]
+```
+
+CONVERT THE DATA FROM CHR TO DATE, AND FROM CHAR TO CATEGORICAL (BINARY)
+```{r}
+#convert the date
+data$date <- as.POSIXct(data$date)
+
+#turn the holidays to binary
+data$holiday <- as.factor(data$holiday)
+data <- data %>% 
+    mutate(holiday = recode(holiday, 
+                      "N" = FALSE, 
+                      "Y" = TRUE))
+
+#turn the school_day to binary
+data$school_day <- as.factor(data$school_day) 
+
+data <- data %>% 
+    mutate(school_day = recode(school_day, 
+                      "N" = FALSE, 
+                      "Y" = TRUE))
+
+```
+
+FIRST DISTRIBUTION AND CORRECTION OF OUTLIARS
+```{r}
+RRP_plot <- ggplot(data, aes(x = RRP)) +
+geom_boxplot(fill = "pink") +
+geom_point(aes(x= mean(RRP), y=0), color="blue")
+
+RRP_plot
+
+#OTLIARS
+Q <- quantile(data$RRP)
+data_ol <- subset(data, data$RRP >= Q[4]+1.5*(Q[4]-Q[2]) | data$RRP<= Q[2]-1.5*(Q[4]-Q[2]))
+
+#WITHOUT
+data <- subset(data, data$RRP <= Q[4]+1.5*(Q[4]-Q[2]) & data$RRP>= Q[2]-1.5*(Q[4]-Q[2]))
+
+```
+
+To start, we plot the distribution of the categorical variables:
+
+
+
+Then, we visualize the distribution of the numerical variables:
+
+```{r ca}
+options(repr.plot.width=7, repr.plot.height=5)
+ggplot(data, aes(x= demand/1000)) +
+geom_histogram(aes(y =..density..), fill="pink", color="black", alpha=0.6) +
+geom_density(color= "blue", size =0.8)+
+geom_vline(aes(xintercept= mean(demand/1000)), color="blue",linetype="dashed", size=1) +
+geom_vline(aes(xintercept= median(demand/1000)), color="red",linetype="dashed", size=1) +
+
+labs(x ="Energy Demand x 1000", y="Count")
+
+```
+
+
+SEPARATE THE DATE ON A SEASON CATEGORICAL VALUE
+```{r}
+data$month<-as.numeric(format(data$date,"%m"))
+data$season <- "summer"
+data$season[data$month>2 & data$month<6] <- "autumn"
+data$season[data$month>5 & data$month<9] <- "winter"
+data$season[data$month>8 & data$month<12] <- "spring"
+data$season<-factor(data$season,levels=c("summer","spring","winter","autumn"))
+summary(data$season)
+```
+
+## 4.1 Categorical variable statistics
+
+There are "gender", "ssc_b","hsc_b", "hsc_s", "degree_t", "workex" and "specialisation" as categorical variables. In this part, each variable is analyzed based on the lable data. Some plots for every variable has drawn for better exploratory analysis.
+
+
+```{r}
+ggplot(data = data_copy, aes(x = date , y = data_copy$demand , group = 1)) +
+  
+  geom_line(color = "red")+
+  labs(x = "date" , y="demand")
+
+
+```
+
+
+```{r}
+
+ggplot(data = data_copy[1:180,], aes(x = date[1:180] , y = data_copy$demand[1:180] , group = 1))+
+  geom_line(color = "red")+
+  labs(x = "date" , y="demand")
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+### 4.1.1 Inspiration
+
+### 4.1.2 Hypothesis 1
+
+In this part, the equality of means of the two categorical variables in the data set("school_day" and "holiday") is going to be examined. First, school days 
+
+we have to check the equality of variances before checking the equality of means. To do so, an F-test is going to be performed. \sigma_sch is the standard deviation of demand for school days and \sigma_nsch is the standard deviation for the other days.
+
+```{r}
+ggplot(data, aes(x = demand, fill = school_day)) +
+  geom_density(alpha = 0.4) +
+  scale_fill_manual(values=c("blue", "green"))
+```
+
+
+
+```{r}
+
+school_days <- data[data$school_day == TRUE,]$demand
+no_school_days <- data[data$school_day == FALSE,]$demand
+
+var.test(school_days, no_school_days , alternative="two.sided")
+```
+
+```{r}
+holidays <- data[data$holiday == TRUE,]$demand
+no_holidays <- data[data$holiday == FALSE,]$demand
+
+var.test(holidays, no_holidays , alternative="two.sided")
+```
+
+```{r}
+ggplot(data, aes(x = demand, fill = holiday)) +
+  geom_density(alpha = 0.4) +
+  scale_fill_manual(values=c("blue", "green"))
+```
+
+```{r}
+options(repr.plot.width=7, repr.plot.height=7)
+data$holiday= as.numeric(data$holiday)
+data$school_day = as.numeric(data$school_day)
+data$date = as.numeric(data$date)
+
+numerical <- subset(data, select = c(demand,
+                                     RRP,
+                                     demand_pos_RRP,
+                                     RRP_positive,
+                                     demand_neg_RRP,
+                                     RRP_negative,
+                                     frac_at_neg_RRP,
+                                     min_temperature,
+                                     max_temperature,
+                                     solar_exposure,
+                                     rainfall,
+                                     school_day,
+                                     holiday
+                                     ))
+
+correlation <- cor(numerical)
+
+corrplot(correlation, method = 'number', type = 'upper')
+
+# col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+# corrplot(corr, method="color", col=col(200),
+#          type="upper", order="hclust",
+#          addCoef.col = "black",
+#          tl.col="black", tl.srt=45,
+#          sig.level = 0.01, insig = "blank",
+#          diag=FALSE)
+```
+
+
+
+
+### 4.1.3 Hypothesis 2
+
+## 4.2 Numerical variable statistics
+
+```{r}
+P1 = ggplot(data, aes(x=RRP)) +
+  geom_histogram(color="black", fill="mediumorchid1", bins=10) +
+  labs(title="RRP histogram") +
+  theme(plot.title = element_text(size=14))
+
+P2 = ggplot(data, aes(x=RRP, y=demand)) +
+  geom_jitter(alpha=0.3, size=2.5) +
+  scale_color_manual("pink") +
+  geom_rug() +
+  geom_smooth(method=lm, formula=y~x) +
+  labs(title="RRP x Demand") +
+  theme(plot.title = element_text(size=14))
+
+options(repr.plot.width=15, repr.plot.height=17)
+#layout <- "ABB \n" 
+P1 + P2 
+#+ plot_layout(design = layout)
+```
+
+
+
+```{r}
+ggplot(data, aes(x=RRP)) +
+geom_histogram(color="black", fill="mediumorchid1", bins=100) +
+labs(title="RRP histogram") +
+theme(plot.title = element_text(size=14))
+```
+
+
+
+```{r}
+ggplot(data, aes(x=RRP, y=demand)) +
+geom_jitter(alpha=0.3, size=2.5) +
+scale_color_manual("pink") +
+geom_rug() +
+geom_smooth(method=lm, formula=y~x) +
+labs(title="RRP x Demand") +
+theme(plot.title = element_text(size=14))
+```
+
+```{r}
+ggplot(data, aes(x=demand_pos_RRP)) +
+geom_histogram(color="black", fill="mediumorchid1", bins=100) +
+labs(title="demand positive RRP histogram") +
+theme(plot.title = element_text(size=14))
+```
+
+```{r}
+ggplot(data, aes(x=demand_pos_RRP, y=demand)) +
+geom_jitter(alpha=0.3, size=2.5) +
+scale_color_manual("pink") +
+geom_rug() +
+geom_smooth(method=lm, formula=y~x) +
+labs(title="demand_pos_RRP x Demand") +
+theme(plot.title = element_text(size=14))
+```
+
+```{r}
+
+ggplot(data, aes(x=RRP_positive)) +
+geom_histogram(color="black", fill="mediumorchid1", bins=100) +
+labs(title="RRP positive histogram") +
+theme(plot.title = element_text(size=14))
+
+```
+```{r}
+ggplot(data, aes(x=RRP_positive, y=demand)) +
+geom_jitter(alpha=0.3, size=2.5) +
+scale_color_manual("pink") +
+geom_rug() +
+geom_smooth(method=lm, formula=y~x) +
+labs(title="RRP_positive x Demand") +
+theme(plot.title = element_text(size=14))
+```
+
+
+
+### 4.2.1 Inspiration
+
+### 4.2.2 Hypothesis 1
+
+### 4.2.3 Hypothesis 2
+
+# 5 Model Analysis
+
+## 5.1 Accuracy metrics
+
+# 6 Model Evaluation
+
+# 7 Conclusion
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
